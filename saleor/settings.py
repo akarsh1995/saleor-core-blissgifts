@@ -220,6 +220,10 @@ if not SECRET_KEY and DEBUG:
     SECRET_KEY = get_random_secret_key()
 
 RSA_PRIVATE_KEY = os.environ.get("RSA_PRIVATE_KEY", None)
+
+if RSA_PRIVATE_KEY:
+    RSA_PRIVATE_KEY = RSA_PRIVATE_KEY.replace("\\n", '\n')
+
 RSA_PRIVATE_PASSWORD = os.environ.get("RSA_PRIVATE_PASSWORD", None)
 JWT_MANAGER_PATH = os.environ.get(
     "JWT_MANAGER_PATH", "saleor.core.jwt_manager.JWTManager"
