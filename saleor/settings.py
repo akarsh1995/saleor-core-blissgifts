@@ -32,6 +32,8 @@ from .core.schedules import initiated_promotion_webhook_schedule
 
 django_stubs_ext.monkeypatch()
 
+from dotenv import load_dotenv
+load_dotenv()  # take environment variables from .env.
 
 def get_list(text):
     return [item.strip() for item in text.split(",")]
