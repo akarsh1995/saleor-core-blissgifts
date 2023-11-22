@@ -2124,7 +2124,9 @@ enum WebhookEventTypeEnum @doc(category: "Webhooks") {
   """A product variant is updated."""
   PRODUCT_VARIANT_UPDATED
 
-  """A product variant is deleted."""
+  """
+  A product variant is deleted. Warning: this event will not be executed when parent product has been deleted. Check PRODUCT_DELETED.
+  """
   PRODUCT_VARIANT_DELETED
 
   """
@@ -2274,6 +2276,13 @@ enum WebhookEventTypeEnum @doc(category: "Webhooks") {
   Added in Saleor 3.8.
   """
   VOUCHER_METADATA_UPDATED
+
+  """
+  A voucher code export is completed.
+  
+  Added in Saleor 3.18.
+  """
+  VOUCHER_CODE_EXPORT_COMPLETED
 
   """An observability event is created."""
   OBSERVABILITY
@@ -2839,7 +2848,9 @@ enum WebhookEventTypeAsyncEnum @doc(category: "Webhooks") {
   """A product variant is updated."""
   PRODUCT_VARIANT_UPDATED
 
-  """A product variant is deleted."""
+  """
+  A product variant is deleted. Warning: this event will not be executed when parent product has been deleted. Check PRODUCT_DELETED.
+  """
   PRODUCT_VARIANT_DELETED
 
   """
@@ -2989,6 +3000,13 @@ enum WebhookEventTypeAsyncEnum @doc(category: "Webhooks") {
   Added in Saleor 3.8.
   """
   VOUCHER_METADATA_UPDATED
+
+  """
+  A voucher code export is completed.
+  
+  Added in Saleor 3.18.
+  """
+  VOUCHER_CODE_EXPORT_COMPLETED
 
   """An observability event is created."""
   OBSERVABILITY
@@ -3680,6 +3698,7 @@ enum WebhookSampleEventTypeEnum @doc(category: "Webhooks") {
   VOUCHER_UPDATED
   VOUCHER_DELETED
   VOUCHER_METADATA_UPDATED
+  VOUCHER_CODE_EXPORT_COMPLETED
   OBSERVABILITY
   THUMBNAIL_CREATED
   SHOP_METADATA_UPDATED
@@ -5558,15 +5577,6 @@ type OrderSettings {
   markAsPaidStrategy: MarkAsPaidStrategyEnum!
 
   """
-  Determine the transaction flow strategy to be used. Include the selected option in the payload sent to the payment app, as a requested action for the transaction.
-  
-  Added in Saleor 3.13.
-  
-  Note: this API is currently in Feature Preview and can be subject to changes at later point.This preview feature field will be removed in Saleor 3.17. Use `PaymentSettings.defaultTransactionFlowStrategy` instead.
-  """
-  defaultTransactionFlowStrategy: TransactionFlowStrategyEnum!
-
-  """
   The time in days after expired orders will be deleted.
   
   Added in Saleor 3.14.
@@ -5583,6 +5593,15 @@ type OrderSettings {
   Note: this API is currently in Feature Preview and can be subject to changes at later point.
   """
   allowUnpaidOrders: Boolean!
+
+  """
+  Determine if voucher applied on draft order should be count toward voucher usage.
+  
+  Added in Saleor 3.18.
+  
+  Note: this API is currently in Feature Preview and can be subject to changes at later point.
+  """
+  includeDraftOrderInVoucherUsage: Boolean!
 }
 
 """
@@ -5602,17 +5621,6 @@ Determine the mark as paid strategy for the channel.
 enum MarkAsPaidStrategyEnum @doc(category: "Channels") {
   TRANSACTION_FLOW
   PAYMENT_FLOW
-}
-
-"""
-Determine the transaction flow strategy.
-
-    AUTHORIZATION - the processed transaction should be only authorized
-    CHARGE - the processed transaction should be charged.
-"""
-enum TransactionFlowStrategyEnum @doc(category: "Payments") {
-  AUTHORIZATION
-  CHARGE
 }
 
 """The `Day` scalar type represents number of days by integer value."""
@@ -5644,6 +5652,17 @@ type PaymentSettings {
   Note: this API is currently in Feature Preview and can be subject to changes at later point.
   """
   defaultTransactionFlowStrategy: TransactionFlowStrategyEnum!
+}
+
+"""
+Determine the transaction flow strategy.
+
+    AUTHORIZATION - the processed transaction should be only authorized
+    CHARGE - the processed transaction should be charged.
+"""
+enum TransactionFlowStrategyEnum @doc(category: "Payments") {
+  AUTHORIZATION
+  CHARGE
 }
 
 """Represents shipping method postal code rule."""
@@ -8899,8 +8918,31 @@ type Voucher implements Node & ObjectWithMetadata @doc(category: "Discounts") {
   """The name of the voucher."""
   name: String
 
-  """The code of the voucher."""
-  code: String!
+  """
+  List of codes available for this voucher.
+  
+  Added in Saleor 3.18.
+  """
+  codes(
+    """Return the elements in the list that come before the specified cursor."""
+    before: String
+
+    """Return the elements in the list that come after the specified cursor."""
+    after: String
+
+    """
+    Retrieve the first n elements from the list. Note that the system only allows fetching a maximum of 100 objects in a single query.
+    """
+    first: Int
+
+    """
+    Retrieve the last n elements from the list. Note that the system only allows fetching a maximum of 100 objects in a single query.
+    """
+    last: Int
+  ): VoucherCodeCountableConnection
+
+  """The code of the voucher.This field will be removed in Saleor 4.0."""
+  code: String
 
   """The number of times a voucher can be used."""
   usageLimit: Int
@@ -8923,6 +8965,15 @@ type Voucher implements Node & ObjectWithMetadata @doc(category: "Discounts") {
   Determine if the voucher usage should be limited to one use per customer.
   """
   applyOncePerCustomer: Boolean!
+
+  """
+  Determine if the voucher codes can be used once or multiple times.
+  
+  Added in Saleor 3.18.
+  
+  Note: this API is currently in Feature Preview and can be subject to changes at later point.
+  """
+  singleUse: Boolean!
 
   """Determine if the voucher is available only for staff members."""
   onlyForStaff: Boolean!
@@ -9050,6 +9101,47 @@ type Voucher implements Node & ObjectWithMetadata @doc(category: "Discounts") {
   Requires one of the following permissions: MANAGE_DISCOUNTS.
   """
   channelListings: [VoucherChannelListing!]
+}
+
+type VoucherCodeCountableConnection @doc(category: "Discounts") {
+  """Pagination data for this connection."""
+  pageInfo: PageInfo!
+  edges: [VoucherCodeCountableEdge!]!
+
+  """A total count of items in the collection."""
+  totalCount: Int
+}
+
+type VoucherCodeCountableEdge @doc(category: "Discounts") {
+  """The item at the end of the edge."""
+  node: VoucherCode!
+
+  """A cursor for use in pagination."""
+  cursor: String!
+}
+
+"""
+Represents voucher code.
+
+Added in Saleor 3.18.
+
+Note: this API is currently in Feature Preview and can be subject to changes at later point.
+"""
+type VoucherCode {
+  """The ID of the voucher code."""
+  id: ID!
+
+  """Code to use the voucher."""
+  code: String
+
+  """Number of times a code has been used."""
+  used: Int
+
+  """Whether a code is active or not."""
+  isActive: Boolean
+
+  """Date time of code creation."""
+  createdAt: DateTime!
 }
 
 """Represents a connection to a list of collections."""
@@ -10513,6 +10605,15 @@ type Checkout implements Node & ObjectWithMetadata @doc(category: "Checkout") {
   """
   translatedDiscountName: String
 
+  """
+  The voucher assigned to the checkout.
+  
+  Added in Saleor 3.18.
+  
+  Requires one of the following permissions: MANAGE_DISCOUNTS.
+  """
+  voucher: Voucher
+
   """The code of voucher assigned to the checkout."""
   voucherCode: String
 
@@ -11443,6 +11544,13 @@ type Order implements Node & ObjectWithMetadata @doc(category: "Orders") {
   token: String! @deprecated(reason: "This field will be removed in Saleor 4.0. Use `id` instead.")
   voucher: Voucher
 
+  """
+  Voucher code that was used for Order.
+  
+  Added in Saleor 3.18.
+  """
+  voucherCode: String
+
   """List of user gift cards."""
   giftCards: [GiftCard!]!
   customerNote: String!
@@ -11699,6 +11807,20 @@ type Fulfillment implements Node & ObjectWithMetadata @doc(category: "Orders") {
 
   """Warehouse from fulfillment was fulfilled."""
   warehouse: Warehouse
+
+  """
+  Amount of refunded shipping price.
+  
+  Added in Saleor 3.14.
+  """
+  shippingRefundedAmount: Money
+
+  """
+  Total refunded amount assigned to this fulfillment.
+  
+  Added in Saleor 3.14.
+  """
+  totalRefundedAmount: Money
 }
 
 """An enumeration."""
@@ -12568,6 +12690,7 @@ enum OrderErrorCode @doc(category: "Orders") {
   NOT_AVAILABLE_IN_CHANNEL
   CHANNEL_INACTIVE
   INVALID_VOUCHER
+  INVALID_VOUCHER_CODE
 }
 
 """An enumeration."""
@@ -13903,8 +14026,19 @@ input VoucherSortingInput @doc(category: "Discounts") {
 }
 
 enum VoucherSortField {
-  """Sort vouchers by code."""
+  """
+  Sort vouchers by code.
+  
+  DEPRECATED: this field will be removed in Saleor 4.0.
+  """
   CODE
+
+  """
+  Sort vouchers by name.
+  
+  Added in Saleor 3.18.
+  """
+  NAME
 
   """Sort vouchers by start date."""
   START_DATE
@@ -16369,7 +16503,7 @@ type Mutation {
   """
   transactionInitialize(
     """
-    The expected action called for the transaction. By default, the `channel.defaultTransactionFlowStrategy` will be used. The field can be used only by app that has `HANDLE_PAYMENTS` permission.
+    The expected action called for the transaction. By default, the `channel.paymentSettings.defaultTransactionFlowStrategy` will be used.The field can be used only by app that has `HANDLE_PAYMENTS` permission.
     """
     action: TransactionFlowStrategyEnum
 
@@ -18060,6 +18194,21 @@ type Mutation {
   ): VoucherChannelListingUpdate @doc(category: "Discounts") @webhookEventsInfo(asyncEvents: [VOUCHER_UPDATED], syncEvents: [])
 
   """
+  Deletes voucher codes.
+  
+  Added in Saleor 3.18. 
+  
+  Requires one of the following permissions: MANAGE_DISCOUNTS.
+  
+  Triggers the following webhook events:
+  - VOUCHER_UPDATED (async): A voucher was updated.
+  """
+  voucherCodeBulkDelete(
+    """List of voucher codes IDs to delete."""
+    ids: [ID!]!
+  ): VoucherCodeBulkDelete @doc(category: "Discounts") @webhookEventsInfo(asyncEvents: [VOUCHER_UPDATED], syncEvents: [])
+
+  """
   Export products to csv file. 
   
   Requires one of the following permissions: MANAGE_PRODUCTS.
@@ -18088,6 +18237,23 @@ type Mutation {
     """Fields required to export gift cards data."""
     input: ExportGiftCardsInput!
   ): ExportGiftCards @doc(category: "Gift cards") @webhookEventsInfo(asyncEvents: [NOTIFY_USER, GIFT_CARD_EXPORT_COMPLETED], syncEvents: [])
+
+  """
+  Export voucher codes to csv/xlsx file.
+  
+  Added in Saleor 3.18.
+  
+  Note: this API is currently in Feature Preview and can be subject to changes at later point. 
+  
+  Requires one of the following permissions: MANAGE_DISCOUNTS.
+  
+  Triggers the following webhook events:
+  - VOUCHER_CODE_EXPORT_COMPLETED (async): A notification for the exported file.
+  """
+  exportVoucherCodes(
+    """Fields required to export voucher codes."""
+    input: ExportVoucherCodesInput!
+  ): ExportVoucherCodes @doc(category: "Discounts") @webhookEventsInfo(asyncEvents: [VOUCHER_CODE_EXPORT_COMPLETED], syncEvents: [])
 
   """
   Upload a file. This mutation must be sent as a `multipart` request. More detailed specs of the upload format can be found here: https://github.com/jaydenseric/graphql-multipart-request-spec 
@@ -20971,7 +21137,7 @@ input OrderSettingsUpdateInput @doc(category: "Orders") {
   automaticallyConfirmAllNewOrders: Boolean
 
   """
-  When enabled, all non-shippable gift card orders will be fulfilled automatically. By defualt set to True.
+  When enabled, all non-shippable gift card orders will be fulfilled automatically. By default set to True.
   """
   automaticallyFulfillNonShippableGiftCard: Boolean
 }
@@ -23201,6 +23367,7 @@ enum ProductVariantBulkErrorCode @doc(category: "Products") {
   REQUIRED
   UNIQUE
   PRODUCT_NOT_ASSIGNED_TO_CHANNEL
+  STOCK_ALREADY_EXISTS
 }
 
 type BulkProductError @doc(category: "Products") {
@@ -24862,6 +25029,13 @@ input DraftOrderCreateInput @doc(category: "Orders") {
   """ID of the voucher associated with the order."""
   voucher: ID
 
+  """
+  A code of the voucher associated with the order.
+  
+  Added in Saleor 3.18.
+  """
+  voucherCode: String
+
   """A note from a customer. Visible by customers in the order summary."""
   customerNote: String
 
@@ -24975,6 +25149,13 @@ input DraftOrderInput @doc(category: "Orders") {
 
   """ID of the voucher associated with the order."""
   voucher: ID
+
+  """
+  A code of the voucher associated with the order.
+  
+  Added in Saleor 3.18.
+  """
+  voucherCode: String
 
   """A note from a customer. Visible by customers in the order summary."""
   customerNote: String
@@ -25950,8 +26131,19 @@ input OrderBulkCreateInput @doc(category: "Orders") {
   """List of gift card codes associated with the order."""
   giftCards: [String!]
 
-  """Code of a voucher associated with the order."""
+  """
+  Code of a voucher associated with the order.
+  
+  DEPRECATED: this field will be removed in Saleor 3.19. Use `voucherCode` instead.
+  """
   voucher: String
+
+  """
+  Code of a voucher associated with the order.
+  
+  Added in Saleor 3.18.
+  """
+  voucherCode: String
 
   """List of discounts."""
   discounts: [OrderDiscountCommonInput!]
@@ -27531,6 +27723,13 @@ type DiscountError @doc(category: "Discounts") {
 
   """List of channels IDs which causes the error."""
   channels: [ID!]
+
+  """
+  List of voucher codes which causes the error.
+  
+  Added in Saleor 3.18.
+  """
+  voucherCodes: [String!]
 }
 
 """An enumeration."""
@@ -27543,6 +27742,7 @@ enum DiscountErrorCode @doc(category: "Discounts") {
   UNIQUE
   CANNOT_MANAGE_PRODUCT_WITHOUT_VARIANT
   DUPLICATED_INPUT_ITEM
+  VOUCHER_ALREADY_USED
 }
 
 """
@@ -27752,8 +27952,19 @@ input VoucherInput @doc(category: "Discounts") {
   """Voucher name."""
   name: String
 
-  """Code to use the voucher."""
+  """
+  Code to use the voucher. This field will be removed in Saleor 4.0. Use `addCodes` instead.
+  """
   code: String
+
+  """
+  List of codes to add.
+  
+  Added in Saleor 3.18.
+  
+  Note: this API is currently in Feature Preview and can be subject to changes at later point.
+  """
+  addCodes: [String!]
 
   """Start date of the voucher in ISO 8601 format."""
   startDate: DateTime
@@ -27794,6 +28005,17 @@ input VoucherInput @doc(category: "Discounts") {
 
   """Voucher can be used only by staff user."""
   onlyForStaff: Boolean
+
+  """
+  When set to 'True', each voucher code can be used only once; otherwise, codes can be used multiple times depending on `usageLimit`.
+  
+  The option can only be changed if none of the voucher codes have been used.
+  
+  Added in Saleor 3.18.
+  
+  Note: this API is currently in Feature Preview and can be subject to changes at later point.
+  """
+  singleUse: Boolean
 
   """Limit number of times this voucher can be used in total."""
   usageLimit: Int
@@ -27915,6 +28137,45 @@ input VoucherChannelListingAddInput @doc(category: "Discounts") {
 
   """Min purchase amount required to apply the voucher."""
   minAmountSpent: PositiveDecimal
+}
+
+"""
+Deletes voucher codes.
+
+Added in Saleor 3.18. 
+
+Requires one of the following permissions: MANAGE_DISCOUNTS.
+
+Triggers the following webhook events:
+- VOUCHER_UPDATED (async): A voucher was updated.
+"""
+type VoucherCodeBulkDelete @doc(category: "Discounts") @webhookEventsInfo(asyncEvents: [VOUCHER_UPDATED], syncEvents: []) {
+  """Returns how many codes were deleted."""
+  count: Int!
+  errors: [VoucherCodeBulkDeleteError!]!
+}
+
+type VoucherCodeBulkDeleteError @doc(category: "Discounts") {
+  """
+  Path to field that caused the error. A value of `null` indicates that the error isn't associated with a particular field.
+  """
+  path: String
+
+  """The error message."""
+  message: String
+
+  """The error code."""
+  code: VoucherCodeBulkDeleteErrorCode!
+
+  """List of voucher codes which causes the error."""
+  voucherCodes: [ID!]
+}
+
+"""An enumeration."""
+enum VoucherCodeBulkDeleteErrorCode @doc(category: "Discounts") {
+  GRAPHQL_ERROR
+  NOT_FOUND
+  INVALID
 }
 
 """
@@ -28046,6 +28307,39 @@ input ExportGiftCardsInput @doc(category: "Gift cards") {
   filter: GiftCardFilterInput
 
   """List of gift cards IDs to export."""
+  ids: [ID!]
+
+  """Type of exported file."""
+  fileType: FileTypesEnum!
+}
+
+"""
+Export voucher codes to csv/xlsx file.
+
+Added in Saleor 3.18.
+
+Note: this API is currently in Feature Preview and can be subject to changes at later point. 
+
+Requires one of the following permissions: MANAGE_DISCOUNTS.
+
+Triggers the following webhook events:
+- VOUCHER_CODE_EXPORT_COMPLETED (async): A notification for the exported file.
+"""
+type ExportVoucherCodes @doc(category: "Discounts") @webhookEventsInfo(asyncEvents: [VOUCHER_CODE_EXPORT_COMPLETED], syncEvents: []) {
+  """
+  The newly created export file job which is responsible for export data.
+  """
+  exportFile: ExportFile
+  errors: [ExportError!]!
+}
+
+input ExportVoucherCodesInput @doc(category: "Discounts") {
+  """
+  The ID of the voucher. If provided, exports all codes belonging to the voucher.
+  """
+  voucherId: ID
+
+  """List of voucher code IDs to export."""
   ids: [ID!]
 
   """Type of exported file."""
@@ -28840,17 +29134,6 @@ input OrderSettingsInput @doc(category: "Orders") {
   markAsPaidStrategy: MarkAsPaidStrategyEnum
 
   """
-  Determine the transaction flow strategy to be used. Include the selected option in the payload sent to the payment app, as a requested action for the transaction.
-  
-  Added in Saleor 3.13.
-  
-  Note: this API is currently in Feature Preview and can be subject to changes at later point.
-  
-  DEPRECATED: this preview feature field will be removed in Saleor 3.17. Use `PaymentSettingsInput.defaultTransactionFlowStrategy` instead.
-  """
-  defaultTransactionFlowStrategy: TransactionFlowStrategyEnum
-
-  """
   Determine if it is possible to place unpaid order by calling `checkoutComplete` mutation.
   
   Added in Saleor 3.15.
@@ -28858,6 +29141,17 @@ input OrderSettingsInput @doc(category: "Orders") {
   Note: this API is currently in Feature Preview and can be subject to changes at later point.
   """
   allowUnpaidOrders: Boolean
+
+  """
+  Specify whether a coupon applied to draft orders will count toward voucher usage.
+  
+  Warning:  when switching this setting from `false` to `true`, the vouchers will be disconnected from all draft orders.
+  
+  Added in Saleor 3.18.
+  
+  Note: this API is currently in Feature Preview and can be subject to changes at later point.
+  """
+  includeDraftOrderInVoucherUsage: Boolean
 }
 
 input CheckoutSettingsInput @doc(category: "Checkout") {
@@ -34486,6 +34780,28 @@ type VoucherMetadataUpdated implements Event @doc(category: "Discounts") {
     """Slug of a channel for which the data should be returned."""
     channel: String
   ): Voucher
+}
+
+"""
+Event sent when voucher code export is completed.
+
+Added in Saleor 3.18.
+"""
+type VoucherCodeExportCompleted implements Event @doc(category: "Discounts") {
+  """Time of the event."""
+  issuedAt: DateTime
+
+  """Saleor version that triggered the event."""
+  version: String
+
+  """The user or application that triggered the event."""
+  issuingPrincipal: IssuingPrincipal
+
+  """The application receiving the webhook."""
+  recipient: App
+
+  """The export file for voucher codes."""
+  export: ExportFile
 }
 
 """

@@ -8,6 +8,10 @@ from django.utils import timezone
 
 from .....attribute import AttributeInputType, AttributeType
 from .....attribute.models import Attribute, AttributeValue
+from .....attribute.tests.model_helpers import (
+    get_product_attribute_values,
+    get_product_attributes,
+)
 from .....attribute.utils import associate_attribute_values_to_instance
 from .....core.postgres import FlatConcatSearchVector
 from .....core.units import MeasurementUnits
@@ -86,7 +90,7 @@ def test_products_query_with_filter_attributes(
 
 
 @pytest.mark.parametrize(
-    "gte, lte, expected_products_index",
+    ("gte", "lte", "expected_products_index"),
     [
         (None, 8, [1, 2]),
         (0, 8, [1, 2]),
@@ -184,7 +188,7 @@ def test_products_query_with_filter_numeric_attributes(
 
 
 @pytest.mark.parametrize(
-    "filter_value, expected_products_index",
+    ("filter_value", "expected_products_index"),
     [
         (False, [0, 1]),
         (True, [0]),
@@ -259,8 +263,8 @@ def test_products_query_with_filter_by_attributes_values_and_range(
     numeric_attribute,
     permission_manage_products,
 ):
-    product_attr = product.attributes.first()
-    attr_value_1 = product_attr.values.first()
+    product_attr = get_product_attributes(product).first()
+    attr_value_1 = get_product_attribute_values(product, product_attr).first()
     product.product_type.product_attributes.add(numeric_attribute)
     associate_attribute_values_to_instance(
         product, numeric_attribute, *numeric_attribute.values.all()
@@ -1634,7 +1638,7 @@ def test_products_query_with_filter_stock_availability_only_stock_in_cc_warehous
 
 
 @pytest.mark.parametrize(
-    "quantity_input, warehouse_indexes, count, indexes_of_products_in_result",
+    ("quantity_input", "warehouse_indexes", "count", "indexes_of_products_in_result"),
     [
         ({"lte": "80", "gte": "20"}, [1, 2], 1, [1]),
         ({"lte": "120", "gte": "40"}, [1, 2], 1, [0]),

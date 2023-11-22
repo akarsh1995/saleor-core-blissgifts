@@ -13,6 +13,7 @@ from ..order import base_calculations
 from ..payment.model_helpers import get_subtotal
 from ..plugins.manager import PluginsManager
 from ..tax import TaxCalculationStrategy
+from ..tax.calculations import calculate_flat_rate_tax
 from ..tax.calculations.order import update_order_prices_with_flat_rates
 from ..tax.utils import (
     calculate_tax_rate,
@@ -27,7 +28,10 @@ from .models import Order, OrderLine
 
 
 def _recalculate_order_prices(
-    manager: PluginsManager, order: Order, lines: Iterable[OrderLine]
+    manager: PluginsManager,
+    order: Order,
+    lines: Iterable[OrderLine],
+    prices_entered_with_tax: bool,
 ) -> None:
     """Fetch taxes from plugins and recalculate order/lines prices.
 
@@ -46,18 +50,22 @@ def _recalculate_order_prices(
                 line_unit = manager.calculate_order_line_unit(
                     order, line, variant, product
                 )
-                line.undiscounted_unit_price = line_unit.undiscounted_price
                 line.unit_price = line_unit.price_with_discounts
 
                 line_total = manager.calculate_order_line_total(
                     order, line, variant, product
                 )
-                line.undiscounted_total_price = line_total.undiscounted_price
                 undiscounted_subtotal += line_total.undiscounted_price
                 line.total_price = line_total.price_with_discounts
 
                 line.tax_rate = manager.get_order_line_tax_rate(
                     order, product, variant, None, line_unit.undiscounted_price
+                )
+                line.undiscounted_unit_price = get_undiscounted_price(
+                    line_unit, line.tax_rate, prices_entered_with_tax, line.currency
+                )
+                line.undiscounted_total_price = get_undiscounted_price(
+                    line_total, line.tax_rate, prices_entered_with_tax, line.currency
                 )
             except TaxError:
                 pass
@@ -73,6 +81,26 @@ def _recalculate_order_prices(
         net=order.base_shipping_price, gross=order.base_shipping_price
     )
     order.total = manager.calculate_order_total(order, lines)
+
+
+def get_undiscounted_price(
+    line_price: OrderTaxedPricesData, tax_rate, prices_entered_with_tax, currency
+):
+    if (
+        tax_rate > 0
+        and line_price.undiscounted_price.net == line_price.undiscounted_price.gross
+    ):
+        return quantize_price(
+            calculate_flat_rate_tax(
+                # It is calculated when net and gross are equal
+                money=line_price.undiscounted_price.net,
+                tax_rate=tax_rate,
+                prices_entered_with_tax=prices_entered_with_tax,
+            ),
+            currency,
+        )
+    else:
+        return line_price.undiscounted_price
 
 
 def _update_order_discounts_and_base_undiscounted_total(
@@ -269,11 +297,13 @@ def fetch_order_prices_if_expired(
 
 def _update_order_discount_for_voucher(order: Order):
     """Create or delete OrderDiscount instances."""
+
     if not order.voucher_id:
         order.discounts.filter(type=DiscountType.VOUCHER).delete()
 
     elif (
-        order.voucher_id and not order.discounts.filter(voucher=order.voucher).exists()
+        order.voucher_id
+        and not order.discounts.filter(voucher_code=order.voucher_code).exists()
     ):
         voucher = order.voucher
         voucher_channel_listing = voucher.channel_listings.filter(  # type: ignore
@@ -286,6 +316,7 @@ def _update_order_discount_for_voucher(order: Order):
                 reason=f"Voucher: {voucher.name}",  # type: ignore
                 voucher=voucher,
                 type=DiscountType.VOUCHER,
+                voucher_code=order.voucher_code,
             )
 
     # Prefetch has to be cleared and refreshed to avoid returning cached discounts
@@ -306,7 +337,7 @@ def _calculate_and_add_tax(
     prices_entered_with_tax: bool,
 ):
     if tax_calculation_strategy == TaxCalculationStrategy.TAX_APP:
-        _recalculate_order_prices(manager, order, lines)
+        _recalculate_order_prices(manager, order, lines, prices_entered_with_tax)
         tax_data = manager.get_taxes_for_order(order)
         _apply_tax_data(order, lines, tax_data)
     else:

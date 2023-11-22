@@ -7,6 +7,10 @@ import pytest
 from django.utils.functional import SimpleLazyObject
 from freezegun import freeze_time
 
+from ....attribute.tests.model_helpers import (
+    get_product_attribute_values,
+    get_product_attributes,
+)
 from ....attribute.utils import associate_attribute_values_to_instance
 from ....discount.error_codes import DiscountErrorCode
 from ....permission.models import Permission
@@ -2158,8 +2162,9 @@ def test_rich_text_attribute_value_create_translation(
     permission_manage_translations,
 ):
     # given
-    assigned_attribute = product_with_rich_text_attribute[0].attributes.first()
-    attribute_value = assigned_attribute.attribute.values.first()
+    product = product_with_rich_text_attribute[0]
+    assigned_attribute = get_product_attributes(product).first()
+    attribute_value = get_product_attribute_values(product, assigned_attribute).first()
     attribute_value_id = graphene.Node.to_global_id(
         "AttributeValue", attribute_value.id
     )
@@ -2289,8 +2294,9 @@ def test_rich_text_attribute_value_update_translation_only_rich_text(
     # given
     base_text = "Base Text"
     rich_text = dummy_editorjs(base_text)
-    assigned_attribute = product_with_rich_text_attribute[0].attributes.first()
-    attribute_value = assigned_attribute.attribute.values.first()
+    product = product_with_rich_text_attribute[0]
+    assigned_attribute = get_product_attributes(product).first()
+    attribute_value = get_product_attribute_values(product, assigned_attribute).first()
     attribute_value.translations.create(
         language_code="pl", name=base_text, rich_text=rich_text
     )
@@ -2325,8 +2331,9 @@ def test_rich_text_attribute_value_update_translation_only_rich_text_long_text(
     # given
     base_text = "Base Text"
     rich_text = dummy_editorjs(base_text)
-    assigned_attribute = product_with_rich_text_attribute[0].attributes.first()
-    attribute_value = assigned_attribute.attribute.values.first()
+    product = product_with_rich_text_attribute[0]
+    assigned_attribute = get_product_attributes(product).first()
+    attribute_value = get_product_attribute_values(product, assigned_attribute).first()
     attribute_value.translations.create(
         language_code="pl", name=base_text, rich_text=rich_text
     )
@@ -2363,8 +2370,9 @@ def test_rich_text_attribute_value_update_translation_only_rich_text_name_set_ma
     # given
     base_text = "Base Text"
     rich_text = dummy_editorjs(base_text)
-    assigned_attribute = product_with_rich_text_attribute[0].attributes.first()
-    attribute_value = assigned_attribute.attribute.values.first()
+    product = product_with_rich_text_attribute[0]
+    assigned_attribute = get_product_attributes(product).first()
+    attribute_value = get_product_attribute_values(product, assigned_attribute).first()
     attribute_value.translations.create(
         language_code="pl", name=base_text, rich_text=rich_text
     )
@@ -2400,8 +2408,9 @@ def test_rich_text_attribute_value_update_translation_only_rich_text_empty_name(
     # given
     base_text = "Base Text"
     rich_text = dummy_editorjs(base_text)
-    assigned_attribute = product_with_rich_text_attribute[0].attributes.first()
-    attribute_value = assigned_attribute.attribute.values.first()
+    product = product_with_rich_text_attribute[0]
+    assigned_attribute = get_product_attributes(product).first()
+    attribute_value = get_product_attribute_values(product, assigned_attribute).first()
     attribute_value.translations.create(
         language_code="pl", name=base_text, rich_text=rich_text
     )
@@ -2436,8 +2445,9 @@ def test_rich_text_attribute_value_update_translation_only_rich_text_name_null(
     # given
     base_text = "Base Text"
     rich_text = dummy_editorjs(base_text)
-    assigned_attribute = product_with_rich_text_attribute[0].attributes.first()
-    attribute_value = assigned_attribute.attribute.values.first()
+    product = product_with_rich_text_attribute[0]
+    assigned_attribute = get_product_attributes(product).first()
+    attribute_value = get_product_attribute_values(product, assigned_attribute).first()
     attribute_value.translations.create(
         language_code="pl", name=base_text, rich_text=rich_text
     )
@@ -3041,7 +3051,7 @@ def test_shop_translation_validates_values_lengths(
 
 
 @pytest.mark.parametrize(
-    "kind, expected_typename",
+    ("kind", "expected_typename"),
     [
         (TranslatableKinds.PRODUCT, "ProductTranslatableContent"),
         (TranslatableKinds.COLLECTION, "CollectionTranslatableContent"),
@@ -3430,7 +3440,7 @@ QUERY_TRANSLATION_PAGE = """
 
 
 @pytest.mark.parametrize(
-    "is_published, perm_codenames",
+    ("is_published", "perm_codenames"),
     [
         (True, ["manage_translations"]),
         (False, ["manage_translations"]),
@@ -3484,7 +3494,7 @@ QUERY_TRANSLATION_SHIPPING_METHOD = """
 
 
 @pytest.mark.parametrize(
-    "perm_codenames, return_shipping_method",
+    ("perm_codenames", "return_shipping_method"),
     [
         (["manage_translations"], False),
         (["manage_translations", "manage_shipping"], True),
@@ -3586,7 +3596,7 @@ QUERY_TRANSLATION_VOUCHER = """
 
 
 @pytest.mark.parametrize(
-    "perm_codenames, return_voucher",
+    ("perm_codenames", "return_voucher"),
     [
         (["manage_translations"], False),
         (["manage_translations", "manage_discounts"], True),
@@ -3690,8 +3700,7 @@ def test_product_and_attribute_translation(user_api_client, product, channel_USD
     product.translations.create(
         language_code="pl", name="Produkt", description=description
     )
-    assigned_attribute = product.attributes.first()
-    attribute = assigned_attribute.attribute
+    attribute = get_product_attributes(product).first()
     attribute.translations.create(language_code="pl", name="Kolor")
 
     query = """
@@ -3779,8 +3788,9 @@ def test_product_attribute_value_rich_text_translation(
 ):
     # given
     rich_text = dummy_editorjs("Test_dummy_data")
-    assigned_attribute = product_with_rich_text_attribute[0].attributes.first()
-    attribute_value = assigned_attribute.attribute.values.first()
+    product = product_with_rich_text_attribute[0]
+    assigned_attribute = get_product_attributes(product).first()
+    attribute_value = get_product_attribute_values(product, assigned_attribute).first()
     attribute_value.translations.create(language_code="pl", rich_text=rich_text)
 
     product_id = graphene.Node.to_global_id(

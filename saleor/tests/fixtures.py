@@ -8,7 +8,7 @@ from decimal import Decimal
 from functools import partial
 from io import BytesIO
 from typing import Callable, Optional
-from unittest.mock import MagicMock, Mock
+from unittest.mock import MagicMock
 
 import graphene
 import pytest
@@ -18,7 +18,6 @@ from django.contrib.sites.models import Site
 from django.core.files import File
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import connection
-from django.forms import ModelForm
 from django.template.defaultfilters import truncatechars
 from django.test.utils import CaptureQueriesContext as BaseCaptureQueriesContext
 from django.utils import timezone
@@ -69,6 +68,7 @@ from ..discount.models import (
     PromotionTranslation,
     Voucher,
     VoucherChannelListing,
+    VoucherCode,
     VoucherCustomer,
     VoucherTranslation,
 )
@@ -245,7 +245,7 @@ def setup_dummy_gateways(settings):
 
 
 @pytest.fixture
-def sample_gateway(settings):
+def _sample_gateway(settings):
     settings.PLUGINS += [
         "saleor.plugins.tests.sample_plugins.ActiveDummyPaymentGateway"
     ]
@@ -438,7 +438,11 @@ def checkout_with_item_and_voucher_specific_products(
     lines, _ = fetch_checkout_lines(checkout_with_item)
     checkout_info = fetch_checkout_info(checkout_with_item, lines, manager)
     add_voucher_to_checkout(
-        manager, checkout_info, lines, voucher_specific_product_type
+        manager,
+        checkout_info,
+        lines,
+        voucher_specific_product_type,
+        voucher_specific_product_type.codes.first(),
     )
     checkout_with_item.refresh_from_db()
     return checkout_with_item
@@ -451,7 +455,9 @@ def checkout_with_item_and_voucher_once_per_order(checkout_with_item, voucher):
     manager = get_plugins_manager()
     lines, _ = fetch_checkout_lines(checkout_with_item)
     checkout_info = fetch_checkout_info(checkout_with_item, lines, manager)
-    add_voucher_to_checkout(manager, checkout_info, lines, voucher)
+    add_voucher_to_checkout(
+        manager, checkout_info, lines, voucher, voucher.codes.first()
+    )
     checkout_with_item.refresh_from_db()
     return checkout_with_item
 
@@ -461,7 +467,9 @@ def checkout_with_item_and_voucher(checkout_with_item, voucher):
     manager = get_plugins_manager()
     lines, _ = fetch_checkout_lines(checkout_with_item)
     checkout_info = fetch_checkout_info(checkout_with_item, lines, manager)
-    add_voucher_to_checkout(manager, checkout_info, lines, voucher)
+    add_voucher_to_checkout(
+        manager, checkout_info, lines, voucher, voucher.codes.first()
+    )
     checkout_with_item.refresh_from_db()
     return checkout_with_item
 
@@ -635,7 +643,7 @@ def checkout_with_variant_without_inventory_tracking(
     return checkout
 
 
-@pytest.fixture()
+@pytest.fixture
 def checkout_with_variants(
     checkout,
     stock,
@@ -660,7 +668,7 @@ def checkout_with_variants(
     return checkout
 
 
-@pytest.fixture()
+@pytest.fixture
 def checkout_with_shipping_address(checkout_with_variants, address):
     checkout = checkout_with_variants
 
@@ -699,7 +707,7 @@ def checkout_with_variants_for_cc(
     return checkout
 
 
-@pytest.fixture()
+@pytest.fixture
 def checkout_with_shipping_address_for_cc(checkout_with_variants_for_cc, address):
     checkout = checkout_with_variants_for_cc
 
@@ -762,7 +770,13 @@ def checkout_with_voucher_free_shipping(
     checkout_info = fetch_checkout_info(
         checkout_with_items_and_shipping, lines, manager
     )
-    add_voucher_to_checkout(manager, checkout_info, lines, voucher_free_shipping)
+    add_voucher_to_checkout(
+        manager,
+        checkout_info,
+        lines,
+        voucher_free_shipping,
+        voucher_free_shipping.codes.first(),
+    )
     return checkout_with_items_and_shipping
 
 
@@ -773,7 +787,7 @@ def checkout_with_gift_card(checkout_with_item, gift_card):
     return checkout_with_item
 
 
-@pytest.fixture()
+@pytest.fixture
 def checkout_with_preorders_only(
     checkout,
     stocks_for_cc,
@@ -789,7 +803,7 @@ def checkout_with_preorders_only(
     return checkout
 
 
-@pytest.fixture()
+@pytest.fixture
 def checkout_with_preorders_and_regular_variant(
     checkout, stocks_for_cc, preorder_variant_with_end_date, product_variant_list
 ):
@@ -3076,7 +3090,7 @@ def product_with_variant_with_file_attribute(
 
 
 @pytest.fixture
-def product_with_multiple_values_attributes(product, product_type, category) -> Product:
+def product_with_multiple_values_attributes(product, product_type) -> Product:
     attribute = Attribute.objects.create(
         slug="modes",
         name="Available Modes",
@@ -3688,6 +3702,7 @@ def product_list_with_variants_many_channel(
             ),
         ]
     )
+    return products
 
 
 @pytest.fixture
@@ -3886,7 +3901,9 @@ def product_with_images(
 
 @pytest.fixture
 def voucher_without_channel(db):
-    return Voucher.objects.create(code="mirumee")
+    voucher = Voucher.objects.create()
+    VoucherCode.objects.create(code="mirumee", voucher=voucher)
+    return voucher
 
 
 @pytest.fixture
@@ -3897,6 +3914,19 @@ def voucher(voucher_without_channel, channel_USD):
         discount=Money(20, channel_USD.currency_code),
     )
     return voucher_without_channel
+
+
+@pytest.fixture
+def voucher_with_many_codes(voucher):
+    VoucherCode.objects.bulk_create(
+        [
+            VoucherCode(code="Multi1", voucher=voucher),
+            VoucherCode(code="Multi2", voucher=voucher),
+            VoucherCode(code="Multi3", voucher=voucher),
+            VoucherCode(code="Multi4", voucher=voucher),
+        ]
+    )
+    return voucher
 
 
 @pytest.fixture
@@ -3912,9 +3942,9 @@ def voucher_with_many_channels(voucher, channel_PLN):
 @pytest.fixture
 def voucher_percentage(channel_USD):
     voucher = Voucher.objects.create(
-        code="saleor",
         discount_value_type=DiscountValueType.PERCENTAGE,
     )
+    VoucherCode.objects.create(code="saleor", voucher=voucher)
     VoucherChannelListing.objects.create(
         voucher=voucher,
         channel=channel_USD,
@@ -3934,7 +3964,8 @@ def voucher_specific_product_type(voucher_percentage, product):
 
 @pytest.fixture
 def voucher_with_high_min_spent_amount(channel_USD):
-    voucher = Voucher.objects.create(code="mirumee")
+    voucher = Voucher.objects.create()
+    VoucherCode.objects.create(code="mirumee", voucher=voucher)
     VoucherChannelListing.objects.create(
         voucher=voucher,
         channel=channel_USD,
@@ -3946,9 +3977,8 @@ def voucher_with_high_min_spent_amount(channel_USD):
 
 @pytest.fixture
 def voucher_shipping_type(channel_USD):
-    voucher = Voucher.objects.create(
-        code="mirumee", type=VoucherType.SHIPPING, countries="IS"
-    )
+    voucher = Voucher.objects.create(type=VoucherType.SHIPPING, countries="IS")
+    VoucherCode.objects.create(code="mirumee", voucher=voucher)
     VoucherChannelListing.objects.create(
         voucher=voucher,
         channel=channel_USD,
@@ -3971,7 +4001,51 @@ def voucher_free_shipping(voucher_percentage, channel_USD):
 @pytest.fixture
 def voucher_customer(voucher, customer_user):
     email = customer_user.email
-    return VoucherCustomer.objects.create(voucher=voucher, customer_email=email)
+    code = voucher.codes.first()
+    return VoucherCustomer.objects.create(voucher_code=code, customer_email=email)
+
+
+@pytest.fixture
+def voucher_multiple_use(voucher_with_many_codes):
+    voucher = voucher_with_many_codes
+    voucher.usage_limit = 3
+    voucher.save(update_fields=["usage_limit"])
+    codes = voucher.codes.all()
+    for code in codes:
+        code.used = 1
+    VoucherCode.objects.bulk_update(codes, ["used"])
+    voucher.refresh_from_db()
+    return voucher
+
+
+@pytest.fixture
+def voucher_single_use(voucher_with_many_codes):
+    voucher = voucher_with_many_codes
+    voucher.single_use = True
+    voucher.save(update_fields=["single_use"])
+    return voucher
+
+
+@pytest.fixture
+def draft_order_list_with_multiple_use_voucher(draft_order_list, voucher_multiple_use):
+    codes = voucher_multiple_use.codes.values_list("code", flat=True)
+    for idx, order in enumerate(draft_order_list):
+        order.voucher_code = codes[idx]
+    Order.objects.bulk_update(draft_order_list, ["voucher_code"])
+    return draft_order_list
+
+
+@pytest.fixture
+def draft_order_list_with_single_use_voucher(draft_order_list, voucher_single_use):
+    voucher_codes = voucher_single_use.codes.all()
+    codes = voucher_codes.values_list("code", flat=True)
+    for idx, order in enumerate(draft_order_list):
+        order.voucher_code = codes[idx]
+    for voucher_code in voucher_codes:
+        voucher_code.is_active = False
+    Order.objects.bulk_update(draft_order_list, ["voucher_code"])
+    VoucherCode.objects.bulk_update(voucher_codes, ["is_active"])
+    return draft_order_list
 
 
 @pytest.fixture
@@ -4641,8 +4715,6 @@ def order_with_lines(
     order.shipping_price = TaxedMoney(net=net, gross=gross)
     order.base_shipping_price = net
     order.shipping_tax_rate = calculate_tax_rate(order.shipping_price)
-    order.total += order.shipping_price
-    order.undiscounted_total += order.shipping_price
     order.save()
 
     recalculate_order(order)
@@ -5187,6 +5259,29 @@ def draft_order_with_fixed_discount_order(draft_order):
     )
     draft_order.save()
     return draft_order
+
+
+@pytest.fixture
+def draft_order_with_voucher(
+    draft_order_with_fixed_discount_order, voucher_multiple_use
+):
+    order = draft_order_with_fixed_discount_order
+    voucher_code = voucher_multiple_use.codes.first()
+    discount = order.discounts.first()
+    discount.type = DiscountType.VOUCHER
+    discount.voucher = voucher_multiple_use
+    discount.voucher_code = voucher_code.code
+    discount.save(update_fields=["type", "voucher", "voucher_code"])
+
+    order.voucher = voucher_multiple_use
+    order.voucher_code = voucher_code.code
+    order.save(update_fields=["voucher", "voucher_code"])
+
+    channel = order.channel
+    channel.include_draft_order_in_voucher_usage = True
+    channel.save(update_fields=["include_draft_order_in_voucher_usage"])
+
+    return order
 
 
 @pytest.fixture
@@ -6022,7 +6117,7 @@ def collection_list(db, channel_USD):
 
 
 @pytest.fixture
-def page(db, page_type):
+def page(db, page_type, size_page_attribute):
     data = {
         "slug": "test-url",
         "title": "Test page",
@@ -6033,54 +6128,16 @@ def page(db, page_type):
     page = Page.objects.create(**data)
 
     # associate attribute value
-    page_attr = page_type.page_attributes.first()
-    page_attr_value = page_attr.values.first()
-
-    associate_attribute_values_to_instance(page, page_attr, page_attr_value)
+    page_attr_value = size_page_attribute.values.get(slug="10")
+    associate_attribute_values_to_instance(page, size_page_attribute, page_attr_value)
 
     return page
 
 
 @pytest.fixture
-def second_page(page):
-    data = {
-        "slug": "test-url-2",
-        "title": "Test page 2",
-        "content": dummy_editorjs("Test content 2."),
-        "is_published": True,
-        "page_type": page.page_type,
-    }
-    page2 = Page.objects.create(**data)
-
-    # associate attribute value to the second page
-    page_attr = page.page_type.page_attributes.first()
-    page_attr_value = page_attr.values.first()
-
-    associate_attribute_values_to_instance(page2, page_attr, page_attr_value)
-
-    attribute = Attribute.objects.create(
-        slug="test-attribute",
-        name="Test Attribute",
-        type="some_attribute_type",
-        input_type=AttributeInputType.DROPDOWN,
-    )
-    attribute.page_types.add(page.page_type)
-
-    attribute_values = []
-    for i in range(10):
-        attribute_values.append(
-            AttributeValue.objects.create(
-                attribute=attribute,
-                name=f"Test-name-attribute-value-{i}",
-                slug=f"test-slug-attribute-value-{i}",
-            )
-        )
-    associate_attribute_values_to_instance(page2, attribute, *attribute_values)
-    return page, page2
-
-
-@pytest.fixture
-def page_with_rich_text_attribute(db, page_type_with_rich_text_attribute):
+def page_with_rich_text_attribute(
+    db, page_type_with_rich_text_attribute, rich_text_attribute_page_type
+):
     data = {
         "slug": "test-url",
         "title": "Test page",
@@ -6091,10 +6148,10 @@ def page_with_rich_text_attribute(db, page_type_with_rich_text_attribute):
     page = Page.objects.create(**data)
 
     # associate attribute value
-    page_attr = page_type_with_rich_text_attribute.page_attributes.first()
-    page_attr_value = page_attr.values.first()
-
-    associate_attribute_values_to_instance(page, page_attr, page_attr_value)
+    page_attr_value = rich_text_attribute_page_type.values.first()
+    associate_attribute_values_to_instance(
+        page, rich_text_attribute_page_type, page_attr_value
+    )
 
     return page
 
@@ -6178,15 +6235,6 @@ def page_type_list(db, tag_page_attribute):
 
 
 @pytest.fixture
-def model_form_class():
-    mocked_form_class = MagicMock(name="test", spec=ModelForm)
-    mocked_form_class._meta = Mock(name="_meta")
-    mocked_form_class._meta.model = "test_model"
-    mocked_form_class._meta.fields = "test_field"
-    return mocked_form_class
-
-
-@pytest.fixture
 def menu(db):
     return Menu.objects.get_or_create(name="test-navbar", slug="test-navbar")[0]
 
@@ -6215,14 +6263,6 @@ def menu_with_items(menu, category, published_collection):
         parent=menu_item,
     )
     return menu
-
-
-@pytest.fixture
-def translated_variant_fr(product):
-    attribute = product.product_type.variant_attributes.first()
-    return AttributeTranslation.objects.create(
-        language_code="fr", attribute=attribute, name="Name tranlsated to french"
-    )
 
 
 @pytest.fixture
@@ -6658,7 +6698,9 @@ def digital_content_url(digital_content, order_line):
 
 @pytest.fixture
 def media_root(tmpdir, settings):
-    settings.MEDIA_ROOT = str(tmpdir.mkdir("media"))
+    root = str(tmpdir.mkdir("media"))
+    settings.MEDIA_ROOT = root
+    return root
 
 
 @pytest.fixture
@@ -6822,6 +6864,16 @@ def app_with_token(db):
 
 
 @pytest.fixture
+def removed_app(db):
+    app = App.objects.create(
+        name="Deleted app ",
+        is_active=True,
+        removed_at=(timezone.now() - datetime.timedelta(days=1, hours=1)),
+    )
+    return app
+
+
+@pytest.fixture
 def app_with_extensions(app_with_token, permission_manage_products):
     first_app_extension = AppExtension(
         app=app_with_token,
@@ -6842,6 +6894,29 @@ def app_with_extensions(app_with_token, permission_manage_products):
     )
     first_app_extension.permissions.add(permission_manage_products)
     return app_with_token, extensions
+
+
+@pytest.fixture
+def removed_app_with_extensions(removed_app, permission_manage_products):
+    first_app_extension = AppExtension(
+        app=removed_app,
+        label="Create product with App",
+        url="www.example.com/app-product",
+        mount=AppExtensionMount.PRODUCT_OVERVIEW_MORE_ACTIONS,
+    )
+    extensions = AppExtension.objects.bulk_create(
+        [
+            first_app_extension,
+            AppExtension(
+                app=removed_app,
+                label="Update product with App",
+                url="www.example.com/app-product-update",
+                mount=AppExtensionMount.PRODUCT_DETAILS_MORE_ACTIONS,
+            ),
+        ]
+    )
+    first_app_extension.permissions.add(permission_manage_products)
+    return removed_app, extensions
 
 
 @pytest.fixture
@@ -7100,6 +7175,17 @@ def webhook_without_name(app):
 
 
 @pytest.fixture
+def webhook_removed_app(removed_app):
+    webhook = Webhook.objects.create(
+        name="Removed app webhook",
+        app=removed_app,
+        target_url="http://www.example.com/test",
+    )
+    webhook.events.create(event_type=WebhookEventAsyncType.ORDER_CREATED)
+    return webhook
+
+
+@pytest.fixture
 def any_webhook(app):
     webhook = Webhook.objects.create(
         name="Any webhook", app=app, target_url="http://www.example.com/any"
@@ -7186,7 +7272,7 @@ def warehouses(address, address_usa, channel_USD):
     return warehouses
 
 
-@pytest.fixture()
+@pytest.fixture
 def warehouses_for_cc(address, shipping_zones, channel_USD):
     warehouses = Warehouse.objects.bulk_create(
         [
@@ -7605,6 +7691,12 @@ def app_export_file(app):
 
 
 @pytest.fixture
+def removed_app_export_file(removed_app):
+    job = ExportFile.objects.create(app=removed_app)
+    return job
+
+
+@pytest.fixture
 def export_file_list(staff_user):
     export_file_list = list(
         ExportFile.objects.bulk_create(
@@ -7671,6 +7763,16 @@ def app_export_event(app_export_file):
         type=ExportEvents.EXPORT_FAILED,
         export_file=app_export_file,
         app=app_export_file.app,
+        parameters={"message": "Example error message"},
+    )
+
+
+@pytest.fixture
+def removed_app_export_event(removed_app_export_file):
+    return ExportEvent.objects.create(
+        type=ExportEvents.EXPORT_FAILED,
+        export_file=removed_app_export_file,
+        app=removed_app_export_file.app,
         parameters={"message": "Example error message"},
     )
 
@@ -7750,6 +7852,15 @@ def event_delivery(event_payload, webhook, app):
 
 
 @pytest.fixture
+def event_delivery_removed_app(event_payload, webhook_removed_app):
+    return EventDelivery.objects.create(
+        event_type=WebhookEventAsyncType.ANY,
+        payload=event_payload,
+        webhook=webhook_removed_app,
+    )
+
+
+@pytest.fixture
 def event_attempt(event_delivery):
     """Return an event delivery attempt object."""
     return EventDeliveryAttempt.objects.create(
@@ -7782,6 +7893,19 @@ def webhook_list_stored_payment_methods_response():
             }
         ]
     }
+
+
+@pytest.fixture
+def event_attempt_removed_app(event_delivery_removed_app):
+    """Return event delivery attempt object"""  # noqa: D400, D415
+    return EventDeliveryAttempt.objects.create(
+        delivery=event_delivery_removed_app,
+        task_id="example_task_id",
+        duration=None,
+        response="example_response",
+        response_headers=None,
+        request_headers=None,
+    )
 
 
 @pytest.fixture
@@ -8123,6 +8247,7 @@ def async_subscription_webhooks_with_root_objects(
     subscription_voucher_deleted_webhook,
     subscription_voucher_webhook_with_meta,
     subscription_voucher_metadata_updated_webhook,
+    subscription_voucher_code_export_completed_webhook,
     address,
     app,
     numeric_attribute,
@@ -8450,6 +8575,10 @@ def async_subscription_webhooks_with_root_objects(
         events.VOUCHER_METADATA_UPDATED: [
             subscription_voucher_metadata_updated_webhook,
             voucher,
+        ],
+        events.VOUCHER_CODE_EXPORT_COMPLETED: [
+            subscription_voucher_code_export_completed_webhook,
+            user_export_file,
         ],
         events.WAREHOUSE_CREATED: [subscription_warehouse_created_webhook, warehouse],
         events.WAREHOUSE_UPDATED: [subscription_warehouse_updated_webhook, warehouse],
