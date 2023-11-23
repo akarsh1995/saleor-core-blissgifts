@@ -2,29 +2,24 @@ steps:
   # Docker build
   - name: 'gcr.io/cloud-builders/docker'
     args: ['build', '-t', 
-           '${REGION}-docker.pkg.dev/${PROJECT_ID}/${_ARTIFACT_REGISTRY_REPO}/${MY_PROJECT_NAME}:${SHORT_SHA}', '.']
+           '${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_ARTIFACT_REGISTRY_REPO}/${REPO_NAME}:${SHORT_SHA}', '.']
     env:
       - "DOCKER_BUILDKIT=1"
 
   # Docker push to Google Artifact Registry
   - name: 'gcr.io/cloud-builders/docker'
-    args: ['push',  '${REGION}-docker.pkg.dev/${PROJECT_ID}/${_ARTIFACT_REGISTRY_REPO}/${MY_PROJECT_NAME}:${SHORT_SHA}']
+    args: ['push',  '${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_ARTIFACT_REGISTRY_REPO}/${REPO_NAME}:${SHORT_SHA}']
     env:
       - "DOCKER_BUILDKIT=1"
 
   # Deploy to Cloud Run
   - name: google/cloud-sdk
-    args: ['gcloud', 'run', 'deploy', '${MY_PROJECT_NAME}', 
-           '--image=${REGION}-docker.pkg.dev/${PROJECT_ID}/${_ARTIFACT_REGISTRY_REPO}/${MY_PROJECT_NAME}:${SHORT_SHA}', 
-           '--region', '${REGION}', '--platform', 'managed', 
+    args: ['gcloud', 'run', 'deploy', '${REPO_NAME}', 
+           '--image=${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_ARTIFACT_REGISTRY_REPO}/${REPO_NAME}:${SHORT_SHA}', 
+           '--region', '${LOCATION}', '--platform', 'managed', 
            '--allow-unauthenticated']
     env:
       - "DOCKER_BUILDKIT=1"
 
 images:
-  - ${REGION}-docker.pkg.dev/${PROJECT_ID}/${_ARTIFACT_REGISTRY_REPO}/${MY_PROJECT_NAME}:${SHORT_SHA}
-
-options:
-  env:
-    - 'REGION=us-west1'
-    - 'MY_PROJECT_NAME=saleor-core-blissgifts'
+  - ${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_ARTIFACT_REGISTRY_REPO}/${REPO_NAME}:${SHORT_SHA}
