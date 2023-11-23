@@ -6,6 +6,10 @@ steps:
     env:
       - "DOCKER_BUILDKIT=1"
 
+  # Push the container image to Container Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', '${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_ARTIFACT_REGISTRY_REPO}${REPO_NAME}:${SHORT_SHA}']
+
   # Deploy to Cloud Run
   - name: google/cloud-sdk
     args: ['gcloud', 'run', 'deploy', '${REPO_NAME}', 
