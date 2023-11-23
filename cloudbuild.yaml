@@ -2,24 +2,24 @@ steps:
   # Docker build
   - name: 'gcr.io/cloud-builders/docker'
     args: ['build', '-t', 
-           '${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_ARTIFACT_REGISTRY_REPO}/${REPO_NAME}:${SHORT_SHA}', '.']
+           '${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_ARTIFACT_REGISTRY_REPO}${REPO_NAME}:${SHORT_SHA}', '.']
     env:
       - "DOCKER_BUILDKIT=1"
 
   # Docker push to Google Artifact Registry
   - name: 'gcr.io/cloud-builders/docker'
-    args: ['push',  '${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_ARTIFACT_REGISTRY_REPO}/${REPO_NAME}:${SHORT_SHA}']
+    args: ['push',  '${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_ARTIFACT_REGISTRY_REPO}${REPO_NAME}:${SHORT_SHA}']
     env:
       - "DOCKER_BUILDKIT=1"
 
   # Deploy to Cloud Run
   - name: google/cloud-sdk
     args: ['gcloud', 'run', 'deploy', '${REPO_NAME}', 
-           '--image=${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_ARTIFACT_REGISTRY_REPO}/${REPO_NAME}:${SHORT_SHA}', 
+           '--image=${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_ARTIFACT_REGISTRY_REPO}${REPO_NAME}:${SHORT_SHA}', 
            '--region', '${LOCATION}', '--platform', 'managed', 
            '--allow-unauthenticated']
     env:
       - "DOCKER_BUILDKIT=1"
 
 images:
-  - ${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_ARTIFACT_REGISTRY_REPO}/${REPO_NAME}:${SHORT_SHA}
+  - ${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_ARTIFACT_REGISTRY_REPO}${REPO_NAME}:${SHORT_SHA}
