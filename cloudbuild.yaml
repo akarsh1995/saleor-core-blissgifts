@@ -1,27 +1,28 @@
+# us-west1-docker.pkg.dev/blissgifts-shop/cloud-run-source-deploy
 steps:
   # Docker build
   - name: 'gcr.io/cloud-builders/docker'
     args: ['build', '-t', 
-           'us-central1-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/${REPO_NAME}:${SHORT_SHA}', '.']
+           'us-central1-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/${REPO_NAME}:${SHORT_SHA}', '.']
     env:
       - "DOCKER_BUILDKIT=1"
 
   # Push the container image to Container Registry
   - name: 'gcr.io/cloud-builders/docker'
     # us-central1-docker.pkg.dev/blissgifts-shop/saleor-core-blissgifts
-    args: ['push', 'us-central1-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/${REPO_NAME}:${SHORT_SHA}']
+    args: ['push', 'us-central1-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/${REPO_NAME}:${SHORT_SHA}']
     env:
       - "DOCKER_BUILDKIT=1"
 
   # Deploy to Cloud Run
   - name: google/cloud-sdk
     args: ['gcloud', 'run', 'deploy', '${REPO_NAME}', 
-           '--image=us-central1-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/${REPO_NAME}:${SHORT_SHA}', 
+           '--image=us-central1-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/${REPO_NAME}:${SHORT_SHA}', 
            '--region', 'us-west1', '--platform', 'managed', 
            '--allow-unauthenticated']
     env:
       - "DOCKER_BUILDKIT=1"
 
 images:
-  - us-central1-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/${REPO_NAME}:${SHORT_SHA}
+  - us-central1-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/${REPO_NAME}:${SHORT_SHA}
 
