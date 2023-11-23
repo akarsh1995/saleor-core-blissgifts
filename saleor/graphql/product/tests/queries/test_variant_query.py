@@ -534,9 +534,9 @@ def test_get_variant_by_id_with_variant_selection_filter(
     )
 
     _associate_attribute_to_instance(
-        variant, file_attribute_with_file_input_type_without_values.pk
+        variant, file_attribute_with_file_input_type_without_values
     )
-    _associate_attribute_to_instance(variant, size_attribute.pk)
+    _associate_attribute_to_instance(variant, size_attribute)
 
     # when
     response = staff_api_client.post_graphql(
@@ -614,8 +614,8 @@ def test_get_variant_with_sorted_attribute_values(
 
 
 @pytest.mark.parametrize(
-    "field, is_nested",
-    (("digitalContent", True), ("quantityOrdered", False)),
+    ("field", "is_nested"),
+    [("digitalContent", True), ("quantityOrdered", False)],
 )
 def test_variant_restricted_fields_permissions(
     staff_api_client,

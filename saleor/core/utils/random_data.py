@@ -30,8 +30,6 @@ from ...account.search import (
 )
 from ...account.utils import store_user_address
 from ...attribute.models import (
-    AssignedPageAttribute,
-    AssignedProductAttribute,
     AssignedProductAttributeValue,
     AssignedVariantAttribute,
     AssignedVariantAttributeValue,
@@ -48,7 +46,13 @@ from ...checkout.models import Checkout
 from ...checkout.utils import add_variant_to_checkout
 from ...core.weight import zero_weight
 from ...discount import DiscountValueType, RewardValueType, VoucherType
-from ...discount.models import Promotion, PromotionRule, Voucher, VoucherChannelListing
+from ...discount.models import (
+    Promotion,
+    PromotionRule,
+    Voucher,
+    VoucherChannelListing,
+    VoucherCode,
+)
 from ...giftcard import events as gift_card_events
 from ...giftcard.models import GiftCard, GiftCardTag
 from ...menu.models import Menu, MenuItem
@@ -361,21 +365,12 @@ def assign_attributes_to_page_types(
         association_model.objects.update_or_create(pk=pk, defaults=defaults)
 
 
-def assign_attributes_to_products(product_attributes):
-    for value in product_attributes:
-        pk = value["pk"]
-        defaults = dict(value["fields"])
-        defaults["product_id"] = defaults.pop("product")
-        defaults["assignment_id"] = defaults.pop("assignment")
-        AssignedProductAttribute.objects.update_or_create(pk=pk, defaults=defaults)
-
-
 def assign_attribute_values_to_products(values):
     for value in values:
         pk = value["pk"]
         defaults = dict(value["fields"])
         defaults["value_id"] = defaults.pop("value")
-        defaults["assignment_id"] = defaults.pop("assignment")
+        defaults["product_id"] = defaults.pop("product")
         AssignedProductAttributeValue.objects.update_or_create(pk=pk, defaults=defaults)
 
 
@@ -395,20 +390,6 @@ def assign_attribute_values_to_variants(variant_attribute_values):
         defaults["value_id"] = defaults.pop("value")
         defaults["assignment_id"] = defaults.pop("assignment")
         AssignedVariantAttributeValue.objects.update_or_create(pk=pk, defaults=defaults)
-
-
-def assign_attributes_to_pages(page_attributes):
-    for value in page_attributes:
-        pk = value["pk"]
-        defaults = dict(value["fields"])
-        defaults["page_id"] = defaults.pop("page")
-        defaults["assignment_id"] = defaults.pop("assignment")
-        assigned_values = defaults.pop("values")
-        assoc, created = AssignedPageAttribute.objects.update_or_create(
-            pk=pk, defaults=defaults
-        )
-        if created:
-            assoc.values.set(AttributeValue.objects.filter(pk__in=assigned_values))
 
 
 def set_field_as_money(defaults, field):
@@ -452,9 +433,6 @@ def create_products_by_schema(placeholder_dir, create_images):
     assign_attributes_to_page_types(
         AttributePage, attributes=types["attribute.attributepage"]
     )
-    assign_attributes_to_products(
-        product_attributes=types["attribute.assignedproductattribute"]
-    )
     assign_attribute_values_to_products(
         types["attribute.assignedproductattributevalue"]
     )
@@ -464,7 +442,6 @@ def create_products_by_schema(placeholder_dir, create_images):
     assign_attribute_values_to_variants(
         types["attribute.assignedvariantattributevalue"]
     )
-    assign_attributes_to_pages(page_attributes=types["attribute.assignedpageattribute"])
     create_collections(
         data=types["product.collection"], placeholder_dir=placeholder_dir
     )
@@ -539,7 +516,7 @@ def create_fake_user(user_password, save=True):
         pass
 
     _, max_user_id = connection.ops.integer_field_range(
-        User.id.field.get_internal_type()  # type: ignore # raw access to field
+        User.id.field.get_internal_type()
     )
     user = User(
         id=fake.random_int(min=1, max=max_user_id),
@@ -1411,13 +1388,13 @@ def create_warehouses():
 def create_vouchers():
     channels = list(Channel.objects.all())
     voucher, created = Voucher.objects.get_or_create(
-        code="FREESHIPPING",
+        name="Free shipping",
         defaults={
             "type": VoucherType.SHIPPING,
-            "name": "Free shipping",
             "discount_value_type": DiscountValueType.PERCENTAGE,
         },
     )
+    VoucherCode.objects.get_or_create(voucher=voucher, code="FREESHIPPING")
     for channel in channels:
         VoucherChannelListing.objects.get_or_create(
             voucher=voucher,
@@ -1430,13 +1407,14 @@ def create_vouchers():
         yield "Shipping voucher already exists"
 
     voucher, created = Voucher.objects.get_or_create(
-        code="DISCOUNT",
+        name="Big order discount",
         defaults={
             "type": VoucherType.ENTIRE_ORDER,
-            "name": "Big order discount",
             "discount_value_type": DiscountValueType.FIXED,
         },
     )
+    VoucherCode.objects.get_or_create(voucher=voucher, code="DISCOUNT")
+
     for channel in channels:
         discount_value = 25
         min_spent_amount = 200
@@ -1458,12 +1436,14 @@ def create_vouchers():
         yield "Value voucher already exists"
 
     voucher, created = Voucher.objects.get_or_create(
-        code="VCO9KV98LC",
+        name="Percentage order discount",
         defaults={
             "type": VoucherType.ENTIRE_ORDER,
             "discount_value_type": DiscountValueType.PERCENTAGE,
         },
     )
+    VoucherCode.objects.get_or_create(voucher=voucher, code="VCO9KV98LC")
+
     for channel in channels:
         VoucherChannelListing.objects.get_or_create(
             voucher=voucher,
