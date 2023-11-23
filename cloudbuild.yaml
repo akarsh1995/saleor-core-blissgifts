@@ -2,22 +2,25 @@ steps:
   # Docker build
   - name: 'gcr.io/cloud-builders/docker'
     args: ['build', '-t', 
-           '${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_ARTIFACT_REGISTRY_REPO}${REPO_NAME}:${SHORT_SHA}', '.']
+           'us-central1-docker.pkg.dev/${PROJECT_ID}/${_ARTIFACT_REGISTRY_REPO}${REPO_NAME}:${SHORT_SHA}', '.']
     env:
       - "DOCKER_BUILDKIT=1"
 
   # Push the container image to Container Registry
   - name: 'gcr.io/cloud-builders/docker'
-    args: ['push', '${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_ARTIFACT_REGISTRY_REPO}${REPO_NAME}:${SHORT_SHA}']
+    args: ['push', 'us-central1-docker.pkg.dev/${PROJECT_ID}/${_ARTIFACT_REGISTRY_REPO}${REPO_NAME}:${SHORT_SHA}']
+    env:
+      - "DOCKER_BUILDKIT=1"
 
   # Deploy to Cloud Run
   - name: google/cloud-sdk
     args: ['gcloud', 'run', 'deploy', '${REPO_NAME}', 
-           '--image=${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_ARTIFACT_REGISTRY_REPO}${REPO_NAME}:${SHORT_SHA}', 
+           '--image=us-central1-docker.pkg.dev/${PROJECT_ID}/${_ARTIFACT_REGISTRY_REPO}${REPO_NAME}:${SHORT_SHA}', 
            '--region', 'us-west1', '--platform', 'managed', 
            '--allow-unauthenticated']
     env:
       - "DOCKER_BUILDKIT=1"
 
 images:
-  - ${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_ARTIFACT_REGISTRY_REPO}${REPO_NAME}:${SHORT_SHA}
+  - us-central1-docker.pkg.dev/${PROJECT_ID}/${_ARTIFACT_REGISTRY_REPO}${REPO_NAME}:${SHORT_SHA}
+
