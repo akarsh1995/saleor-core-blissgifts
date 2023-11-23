@@ -6,12 +6,6 @@ steps:
     env:
       - "DOCKER_BUILDKIT=1"
 
-  # Docker push to Google Artifact Registry
-  - name: 'gcr.io/cloud-builders/docker'
-    args: ['push',  '${LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_ARTIFACT_REGISTRY_REPO}${REPO_NAME}:${SHORT_SHA}']
-    env:
-      - "DOCKER_BUILDKIT=1"
-
   # Deploy to Cloud Run
   - name: google/cloud-sdk
     args: ['gcloud', 'run', 'deploy', '${REPO_NAME}', 
